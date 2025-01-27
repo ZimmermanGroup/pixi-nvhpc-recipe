@@ -17,4 +17,5 @@ channels = [
 [tasks]
 
 [dependencies]
+cxx-compiler = ">=1.9.0,<2"
 pixi-nvhpc-recipe = {path = "."}
