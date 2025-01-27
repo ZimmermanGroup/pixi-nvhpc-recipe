@@ -1,9 +1,20 @@
-[project]
+[workspace]
 channels = ["conda-forge"]
-name = "pixi-nvhpc-recipe"
 platforms = ["linux-64"]
+preview = ["pixi-build"]
+
+[package]
+name = "pixi-nvhpc-recipe"
 version = "0.1.0"
+
+[package.build]
+backend = { name = "pixi-build-rattler-build", version = "*" }
+channels = [
+  "https://prefix.dev/pixi-build-backends",
+  "https://prefix.dev/conda-forge",
+]
 
 [tasks]
 
 [dependencies]
+pixi-nvhpc-recipe = {path = "."}

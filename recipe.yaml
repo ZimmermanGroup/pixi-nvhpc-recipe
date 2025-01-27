@@ -1,0 +1,14 @@
+context:
+  version_year: "24"
+  version_month: "9"
+
+package:
+  name: Nvidia-HPC-SDK
+  version: ${{ version_year }}.${{ version_month}}
+
+source:
+  url: https://developer.download.nvidia.com/hpc-sdk/${{ version_year }}.${{ version_month }}/nvhpc_20${{ version_year }}_${{ version_year }}${{ version_month }}_Linux_x86_64_cuda_12.6.tar.gz
+  md5: 26845353ae76edd7a2c89f95e0046126
+
+build:
+  number: 0
