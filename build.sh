@@ -10,8 +10,8 @@ export NVHPC_INSTALL_TYPE="auto"
 ./install
 
 # allow user to troubleshoot build directories before they are cleaned up
-touch WORKING
-while [ -f "WORKING" ]; do
-  sleep 1
-done
-echo "File 'WORKING' no longer exists! Continuing execution..."
+# touch WORKING
+# while [ -f "WORKING" ]; do
+#   sleep 1
+# done
+# echo "File 'WORKING' no longer exists! Continuing execution..."

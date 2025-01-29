@@ -3,7 +3,7 @@ context:
   version_month: "9"
 
 package:
-  name: Nvidia-HPC-SDK
+  name: pixi-nvhpc-recipe
   version: ${{ version_year }}.${{ version_month}}
 
 source:
