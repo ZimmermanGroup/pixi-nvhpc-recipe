@@ -229,6 +229,18 @@ for d in "$NV"/comm_libs/*/nccl-* "$NV"/comm_libs/*/nvshmem "$NV"/comm_libs/open
   rm -rf "$d"
 done
 
+# Static variants of the CUDA math libraries: 3.2 GiB in six files, led by
+# libcublasLt_static.a at 1.0 GiB. Nothing in this stack links them -- SlaterGPU
+# and ZEST use the CUDA::cublas / CUDA::cusolver CMake targets, which are the
+# shared libraries; the static ones are only reachable via the explicit
+# CUDA::*_static targets.
+#
+# Deliberately scoped to math_libs. The static archives under cuda/ are a
+# different matter: nvcc links libcudart_static.a by *default*, and culibos /
+# cudadevrt / nvptxcompiler_static are part of ordinary device linking, so
+# removing those would break compilation rather than just an opt-in link mode.
+find "$NV/math_libs" -name '*_static.a' -delete 2>/dev/null || true
+
 # The trims above orphan the aliases and REDIST entries that pointed into them
 # (rattler-build reports each one as a packaging warning). Sweep them.
 find "$ARCHDIR" -xtype l -delete 2>/dev/null || true
