@@ -213,24 +213,25 @@ NV="$ARCHDIR/$NVHPC_RELEASE"
 rm -rf "$NV/profilers"
 find "$ARCHDIR" -depth -type d \( -name examples -o -name doc -o -name samples \) -exec rm -rf {} + 2>/dev/null || true
 
-# comm_libs/mpi is NVIDIA's own alias for the default MPI stack (HPC-X), and is
-# what `module load nvhpc` puts on PATH. The SDK ships an older hpcx tree beside
-# it that nothing references. Resolve the alias rather than hardcoding a version
-# so this keeps working across releases.
-MPI_TARGET=$(readlink -f "$NV/comm_libs/mpi" 2>/dev/null || true)
-for h in "$NV"/comm_libs/*/hpcx/hpcx-*; do
-  [ -d "$h" ] || continue
-  case "${MPI_TARGET:-}" in
-    "$h" | "$h"/*) continue ;;
-  esac
-  rm -rf "$h"
-done
+# DO NOT trim hpcx. The issue's trim table was measured on 25.1, which shipped a
+# duplicate hpcx-2.20 beside `comm_libs/mpi -> 2.21`. 25.5 ships exactly one
+# HPC-X (hpcx-2.22.1) and there is nothing to deduplicate. The trap is that
+# `comm_libs/mpi` resolves to `comm_libs/hpcx`, a 1.6 MB directory holding only
+# the wrapper binaries -- so a "keep whatever mpi points at" rule compares at the
+# wrong level and deletes the actual stack under comm_libs/<cuda>/hpcx/, leaving
+# an mpicc with nothing behind it.
 
-# Unused by SlaterGPU / ZEST / XCtera, which use HPC-X MPI and no NCCL/NVSHMEM.
-for d in "$NV"/comm_libs/*/nvshmem "$NV"/comm_libs/*/nccl "$NV"/comm_libs/*/openmpi4; do
+# Unused by SlaterGPU / ZEST / XCtera, which use HPC-X and neither NCCL nor
+# NVSHMEM. Note the version suffixes: the directories are nccl-2.18 / nccl-2.26,
+# so a bare */nccl glob matches nothing and silently keeps 1.4 GiB.
+for d in "$NV"/comm_libs/*/nccl-* "$NV"/comm_libs/*/nvshmem "$NV"/comm_libs/openmpi4; do
   [ -e "$d" ] || continue
   rm -rf "$d"
 done
+
+# The trims above orphan the aliases and REDIST entries that pointed into them
+# (rattler-build reports each one as a packaging warning). Sweep them.
+find "$ARCHDIR" -xtype l -delete 2>/dev/null || true
 
 stage "trimmed"
 echo "[nvhpc] installed size: $(du -sh "$PREFIX" 2>/dev/null | cut -f1)"
