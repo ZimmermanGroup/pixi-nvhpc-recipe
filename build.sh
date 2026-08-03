@@ -213,13 +213,23 @@ NV="$ARCHDIR/$NVHPC_RELEASE"
 rm -rf "$NV/profilers"
 find "$ARCHDIR" -depth -type d \( -name examples -o -name doc -o -name samples \) -exec rm -rf {} + 2>/dev/null || true
 
-# DO NOT trim hpcx. The issue's trim table was measured on 25.1, which shipped a
-# duplicate hpcx-2.20 beside `comm_libs/mpi -> 2.21`. 25.5 ships exactly one
-# HPC-X (hpcx-2.22.1) and there is nothing to deduplicate. The trap is that
-# `comm_libs/mpi` resolves to `comm_libs/hpcx`, a 1.6 MB directory holding only
-# the wrapper binaries -- so a "keep whatever mpi points at" rule compares at the
-# wrong level and deletes the actual stack under comm_libs/<cuda>/hpcx/, leaving
-# an mpicc with nothing behind it.
+# 25.5 ships two HPC-X trees, hpcx-2.20 and hpcx-2.22.1, and only the newer one
+# is selected. Drop the other: 1.5 GiB for a stack nothing can reach.
+#
+# The anchor has to be `hpcx/latest`. It is tempting to resolve `comm_libs/mpi`
+# instead, since that is the alias `module load nvhpc` uses -- but it points at
+# `comm_libs/hpcx`, a 1.6 MB directory holding only the wrapper binaries, not at
+# a versioned tree. A rule written against it compares at the wrong level and
+# deletes *both* real stacks, leaving an mpicc with nothing behind it.
+for hpcx_dir in "$NV"/comm_libs/*/hpcx; do
+  [ -d "$hpcx_dir" ] || continue
+  keep=$(readlink "$hpcx_dir/latest" 2>/dev/null || true)
+  [ -n "$keep" ] || continue
+  for h in "$hpcx_dir"/hpcx-*; do
+    [ -d "$h" ] || continue
+    if [ "$(basename "$h")" != "$keep" ]; then rm -rf "$h"; fi
+  done
+done
 
 # Unused by SlaterGPU / ZEST / XCtera, which use HPC-X and neither NCCL nor
 # NVSHMEM. Note the version suffixes: the directories are nccl-2.18 / nccl-2.26,
@@ -235,11 +245,24 @@ done
 # shared libraries; the static ones are only reachable via the explicit
 # CUDA::*_static targets.
 #
-# Deliberately scoped to math_libs. The static archives under cuda/ are a
-# different matter: nvcc links libcudart_static.a by *default*, and culibos /
-# cudadevrt / nvptxcompiler_static are part of ordinary device linking, so
-# removing those would break compilation rather than just an opt-in link mode.
-find "$NV/math_libs" -name '*_static.a' -delete 2>/dev/null || true
+# The glob is '*_static*.a', not '*_static.a' -- libcufft ships a
+# libcufft_static_nocallback.a variant that the narrower pattern misses, and it
+# is 284 MiB on its own.
+find "$NV/math_libs" -name '*_static*.a' -delete 2>/dev/null || true
+
+# Same reasoning for NPP, which is CUDA's image and signal processing library:
+# 380 MiB of static archives that an electronic-structure code has no use for.
+#
+# Everything else static under cuda/ stays. Those are not equivalent: nvcc links
+# libcudart_static.a by *default*, and culibos / cudadevrt / nvptxcompiler_static
+# are part of ordinary device linking, so removing them would break compilation
+# rather than just an opt-in link mode.
+find "$NV/cuda" -name 'libnpp*_static.a' -delete 2>/dev/null || true
+
+# libnvvp is the Visual Profiler's Java GUI -- the same category as the
+# profilers directory removed above, just shipped under cuda/ where that
+# find did not reach.
+rm -rf "$NV"/cuda/*/libnvvp
 
 # The trims above orphan the aliases and REDIST entries that pointed into them
 # (rattler-build reports each one as a packaging warning). Sweep them.
