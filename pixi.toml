@@ -2,20 +2,34 @@
 channels = ["conda-forge"]
 platforms = ["linux-64"]
 preview = ["pixi-build"]
+# The build script relies on `pixi build` behaviour that older pixi predates,
+# and SlaterGPU CI has been on >= 0.60 since it hit the same wall.
+requires-pixi = ">=0.60.0"
 
 [package]
+# recipe.yaml is the source of truth for the version under this backend, but
+# leaving these out of sync is how the old 0.1.0-vs-24.9 mismatch happened, so
+# keep them equal.
 name = "pixi-nvhpc-recipe"
-version = "0.1.0"
+version = "25.5"
 
-[package.build]
-backend = { name = "pixi-build-rattler-build", version = "*" }
+[package.build.backend]
+name = "pixi-build-rattler-build"
+# Pinned, not "*". pixi-build is a preview feature and a backend release has
+# already broken this group's builds more than once (SlaterGPU#96, #71, #50,
+# ZEST#28, #64), which is why SlaterGPU and ZEST both cap theirs. The upper
+# bound is the newest tagged release; the pixi-build-backends channel also
+# publishes dated dev builds (0.4.5.20260731...) which this deliberately
+# excludes.
+version = ">=0.4.2,<=0.4.4"
+# Where to get the backend itself (top-level [package.build] channels is
+# deprecated).
 channels = [
   "https://prefix.dev/pixi-build-backends",
   "https://prefix.dev/conda-forge",
 ]
 
-[tasks]
-
-[dependencies]
-cxx-compiler = ">=1.9.0,<2"
-pixi-nvhpc-recipe = {path = "."}
+# NOTE: the package is deliberately NOT listed as a dependency of this
+# workspace's own environment. `pixi install` would then materialize the whole
+# ~10 GB SDK into .pixi/envs/default on top of the build tree, which does not
+# fit a 30 GB session. Test the built package from a scratch project instead.

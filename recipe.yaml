@@ -1,14 +1,81 @@
+# NVIDIA HPC SDK (nvhpc) packaged as a conda package so that the group's
+# electronic-structure stack (SlaterGPU -> ZEST -> XCtera) can declare its
+# compiler toolchain as an ordinary pixi dependency instead of assuming an
+# ambient `module load nvhpc`. See issue #1 for the full rationale.
+#
+# Note the deliberate absence of a `source:` section -- build.sh fetches and
+# extracts the archive itself. The reasoning, and what that costs, is
+# documented at the top of build.sh.
+
 context:
-  version_year: "24"
-  version_month: "9"
+  version: "25.5"
+  # NVIDIA's tarball name compacts the version (25.5 -> 255) and pins a CUDA
+  # version independently of the SDK version, so all three have to be
+  # parameterized together -- bumping only `version` would build a URL that
+  # 404s. (The previous revision of this recipe had exactly that bug: it
+  # parameterized year/month but hardcoded `cuda_12.6`.)
+  version_compact: "255"
+  cuda_version: "12.9"
+  nvhpc_arch: ${{ "x86_64" if target_platform == "linux-64" else "aarch64" }}
+  tarball: nvhpc_2025_${{ version_compact }}_Linux_${{ nvhpc_arch }}_cuda_${{ cuda_version }}.tar.gz
+  url: https://developer.download.nvidia.com/hpc-sdk/${{ version }}/${{ tarball }}
+  # From https://developer.download.nvidia.com/hpc-sdk/25.5/md5sum.txt.
+  # build.sh tees the download through md5sum and fails on mismatch; this is
+  # the checksum verification we would otherwise get for free from `source:`.
+  md5: ${{ "748302adcb483bc332214a34dad1e31d" if target_platform == "linux-64" else "a5406d065e7e709a4c449be1fb9278d2" }}
 
 package:
   name: pixi-nvhpc-recipe
-  version: ${{ version_year }}.${{ version_month}}
-
-source:
-  url: https://developer.download.nvidia.com/hpc-sdk/${{ version_year }}.${{ version_month }}/nvhpc_20${{ version_year }}_${{ version_year }}${{ version_month }}_Linux_x86_64_cuda_12.6.tar.gz
-  md5: 26845353ae76edd7a2c89f95e0046126
+  version: ${{ version }}
 
 build:
   number: 0
+  script:
+    file: build.sh
+    env:
+      NVHPC_URL: ${{ url }}
+      NVHPC_MD5: ${{ md5 }}
+      NVHPC_RELEASE: ${{ version }}
+  dynamic_linking:
+    # NVHPC ships thousands of vendor shared objects. Running patchelf over all
+    # of them to rewrite RPATHs is slow and risks corrupting libraries we do not
+    # own, and it buys nothing: the SDK locates its own libraries relative to
+    # the compiler driver, and the activation scripts (phase 2) will set
+    # LD_LIBRARY_PATH for everything else.
+    binary_relocation: false
+    # Driver libraries. They live on the host, are not redistributable, and are
+    # legitimately absent on a build machine with no NVIDIA GPU.
+    missing_dso_allowlist:
+      - "*/libcuda.so*"
+      - "*/libnvidia-ml.so*"
+
+requirements:
+  build:
+    # igzip. Decompresses roughly 4x faster than gzip, which matters because
+    # this archive expands to ~19 GB and decompression, not the network, is what
+    # the streaming pipeline in build.sh has to keep fed.
+    # The conda-forge package is `isa-l`; `isal` is the Debian name.
+    - isa-l
+
+about:
+  homepage: https://developer.nvidia.com/hpc-sdk
+  summary: NVIDIA HPC SDK ${{ version }} (CUDA ${{ cuda_version }})
+  description: |
+    The NVIDIA HPC SDK: the nvc / nvc++ / nvfortran compilers, CUDA ${{ cuda_version }},
+    the math libraries (cuBLAS, cuSOLVER, ...) and the bundled HPC-X MPI.
+
+    Built from NVIDIA's official Linux tarball. Redistribution of the built
+    artifact is subject to the NVIDIA HPC SDK End-User License Agreement, which
+    is why this is built from source per-machine rather than served from a
+    channel.
+  license: LicenseRef-NVIDIA-HPC-SDK-EULA
+  documentation: https://docs.nvidia.com/hpc-sdk/
+
+extra:
+  eula: https://docs.nvidia.com/hpc-sdk/eula/index.html
+  # Provenance. With no `source:` section rattler-build writes no
+  # .source_info.json, so record by hand what was downloaded and verified.
+  source:
+    url: ${{ url }}
+    md5: ${{ md5 }}
+    md5sum_txt: https://developer.download.nvidia.com/hpc-sdk/${{ version }}/md5sum.txt
